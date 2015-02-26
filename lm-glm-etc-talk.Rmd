@@ -1,0 +1,246 @@
+## Basic regression and classification models in R and some generalizations
+## Robert Dodier
+## PDX Data Science Group
+
+### Basic models for regression and classification
+
+ * Prototypical regression: linear model
+     + R implementation: lm
+
+ * Prototypical classification: generalized linear model
+     + R implementation: glm
+
+ * Useful to understand other models as generalizations of these
+
+ * Functions for other models in R generally follow same conventions as lm
+
+### Linear model
+
+ * "Linear" because output (a.k.a. response or target)
+is a linear combination of other variables
+
+ * Input terms may comprise quadratic or other powers,
+trig/log functions, multiplicative terms, etc
+
+ * e.g. $y = \alpha_1 x_1^2 + \alpha_2 sin(x_2) + \alpha_3 x_3 x_4$ + noise
+is a linear model
+
+ * Inputs may be factors (i.e. categorical variables),
+otherwise inputs are considered quantitative variables
+
+### R implementation: lm
+
+ * `my.model <- lm (y ~ ... (some formula), data=my.data)`
+where `data` is usually a data frame
+
+ * Formula:
+
+     + `+` for additive terms
+     + `*` for additive terms plus interactions
+     + `:` for interactions
+     + `-` to remove terms
+     + `+ 1` to include constant term (default)
+     + `+ 0` to exclude constant term
+     + `^` expands to `*` to specified degree
+     + `%in%` = ???
+
+ * Variables in formula are names of columns in data frame,
+may appear with or without transformation e.g. `log(x)`, `sin(x)`
+
+### lm example
+
+```{r}
+heights <- c(rnorm (20, mean=69, sd=8), rnorm (20, mean=64, sd=6))
+my.data <- data.frame (height=heights,
+  age= c(runif (40, min=20, max=80)),
+  gender=c(rep("M", 20), rep("F", 20)))
+
+model.1 <- lm (height ~ age, data=my.data)
+
+summary (model.1)
+```
+
+```{r}
+model.2 <- lm (height ~ gender, data=my.data)
+
+summary (model.2)
+```
+
+```{r}
+model.3 <- lm (height ~ age * gender, data=my.data)
+
+summary (model.3)
+```
+
+### Generalized linear model
+
+ * LM: $y = \mathrm{linear\ combination\ of\ } x + \mathrm{noise}$
+
+ * GLM: $f(y) = \mathrm{linear\ combination\ of\ } x + \mathrm{noise}$
+
+     + $f$ = link function, choosing different link function creates a different model
+
+     + also choosing different noise distribution creates a different model
+
+ * GLM brings different kinds of models under one roof;
+in particular logistic regression and other classification models
+
+ * Logistic regression = GLM with logit (log odds) link function, $\mathrm{logit}(y) = \log(y / (1 - y))$
+
+     + i.e. GLM is $\mathrm{logit}(y) = \mathrm{linear\ combination\ of\ } x$
+
+ * Note if $\mathrm{logit}(y) = \mathrm{linear\ combination\ of\ } x$,
+   then $y = 1/(1 + \exp(-(\mathrm{linear\ combination\ of\ } x)))$
+
+ * $1/(1 + \exp(-u)) = \mathrm{logistic\ function}$
+
+### R implementation: glm
+
+ * `my.model ~ glm (y ~ ... (some formula), data=my.data, family=...)`
+
+ * 'family' is new here -- it selects the link function and noise model
+
+     + family=binomial => logit link function, logistic regression
+
+     + family=gaussian => identity link function, linear regression
+
+     + family=poisson => log link function, Poisson regression
+
+### glm example
+ 
+ * construct made-up data
+
+   Let $x \sim N(0, I)$. Then $L x + \mu \sim N(\mu, \Sigma)$ where $\Sigma = L L'$.
+
+```{r}
+m1 <- c(25, 60)
+L1 <- matrix (data=c(50, 30, 0, 40), nrow=2)
+S1 <- L1 %*% t(L1)
+pC1 <- 0.5
+
+m2 <- c(74, 37)
+L2 <- matrix (data=c(40, 24, 0, 12), nrow=2)
+S2 <- L2 %*% t(L2)
+pC2 <- 0.5
+
+z1 <- matrix (data=rnorm(100), ncol=2)
+x1 <- t(L1 %*% t(z1)) + matrix (data=m1, nrow=50, ncol=2, byrow=T)
+
+z2 <- matrix (data=rnorm(100), ncol=2)
+x2 <- t(L2 %*% t(z2)) + matrix (data=m2, nrow=50, ncol=2, byrow=T)
+```
+
+ * display made-up data
+
+   Class 1 = green, class 2 = red.
+
+```{r}
+plot (x1[,1], x1[,2], col='green')
+points (x2[,1], x2[,2], col='red')
+```
+
+ * build GLM
+
+   Put made-up data into a data frame.
+   `label` = class label (50 of class 1, 50 of class 2),
+   `X1` = first input dimension,
+   `X2` = second input dimension.
+
+```{r}
+my.data <- data.frame (label=c(rep("C1", 50), rep("C2", 50)),
+  X1=c(x1[, 1], x2[, 1]), X2=c(x1[, 2], x2[, 2]))
+
+my.glm <- glm (label ~ X1 + X2, data=my.data, family=binomial)
+```
+
+ * generate outputs
+
+   `type="link"` => output logit (log-odds) value,
+   `type="response"` => output class probabilities
+
+```{r}
+head (predict (my.glm, type="link"))
+head (predict (my.glm, type="response"))
+```
+
+ * construct classification boundary
+
+   Draw the line such that logit(x) = 0, i.e., class probabilities are equal.
+   Extract coefficients from model.
+
+```{r}
+foo <- function (a, x) { (a[[1]] + a[[2]]*x)/(-a[[3]]) }
+
+xmin <- min (my.data[, 2])
+xmax <- max (my.data[, 2])
+
+plot (x1[,1], x1[,2], col='green')
+points (x2[,1], x2[,2], col='red')
+lines (c(xmin, xmax), c(foo (my.glm$coefficients, xmin), foo (my.glm$coefficients, xmax)), col='blue')
+```
+
+### Probabilistic interpretation of logistic regression
+
+ * Suppose $p(x | C_1)$ and $p(x | C_2)$ are some distributions (so-called generative distributions).
+   Then the posterior class probability $p(C_1 | x)$ is
+
+$$
+\begin{aligned}
+p(C_1 | x) & = \frac{p(x | C_1) p(C_1)}{p(x)} \\
+ & = \frac{p(x | C_1) p(C_1)}{p(x | C_1) p(C_1) + p(x | C_2) p(C_2)} \\
+ & = \frac{1}{1 + \frac{p(x | C_2) p(C_2)}{p(x | C_1) p(C_1)}} \\
+ & = \frac{1}{1 + \mathrm{foo}} \\
+ & = \frac{1}{1 + \exp(- (-\log(\mathrm{foo})))} \\
+ & = \mathrm{logistic}(\log(\mathrm{1/foo}))
+\end{aligned}
+$$
+
+Note that $1/\mathrm{foo} = \frac{p(C_1 | x) p(x)}{p(C_2 | x) p(x)} = \frac{p(C_1 | x)}{p(C_2 | x)}$,
+i.e. posterior odds for class 1 versus class 2.
+
+Let's look at the log odds for normal distributions.
+
+$$
+  \log(1/\mathrm{foo}) = \log(p(x | C_1)) - \log(p(x | C_2) + (\mathrm{stuff\ free\ of\ } x) \\
+   = - \frac{1}{2} (x - \mu_1)' \Sigma_1^{-1} (x - \mu_1) + \frac{1}{2} (x - \mu_2)' \Sigma_2^{-1} (x - \mu_2)
+     + (\mathrm{stuff\ free\ of\ } x)
+$$
+
+Therefore
+
+$$
+  \log(1/\mathrm{foo}) \propto - (x - \mu_1)' \Sigma_1^{-1} (x - \mu_1) + (x - \mu_2)' \Sigma_2^{-1} (x - \mu_2)
+    + (\mathrm{stuff\ free\ of\ } x)
+$$
+
+When $\Sigma_1 = \Sigma_2 = \Sigma$ (i.e., generative distributions have same "shape"),
+
+$$
+   \log(1/\mathrm{foo}) \propto (\mu_2 - \mu_1)' \Sigma^{-1} x + (\mathrm{stuff\ free\ of\ } x)
+$$
+
+That's a linear (more precisely, affine) function of $x$,
+and its contours are hyperplanes.
+
+### Logistic regression as a point of departure
+
+ * Allow different covariances => contours of log-odds are quadratics
+
+ * Allow distributions other than normal => contours are no longer conic sections
+
+ * Use class probabilities to compute expected loss => decision rule for classification
+
+ * Build model via generative distributions or via posterior log-odds
+
+ * Focus on boundaries, ignore probabilities => linear discriminant, SVM, CART
+
+### Logistic regression and neural networks
+
+ * "Neural networks" are a generalization of logistic regression 
+
+ * NN output = logistic(linear combination of logistic functions)
+
+    => contours are softened piecewise hyperplanes (each piece corresponding to a hidden unit)
+
+ * Universal approximation: with enough pieces (hidden units), you can approximate any shape of boundary
+
