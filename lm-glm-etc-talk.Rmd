@@ -35,6 +35,7 @@ where `data` is usually a data frame
 
  * Formula:
 
+     + `.` = all terms in data frame except for dependent variable
      + `+` for additive terms
      + `*` for additive terms plus interactions
      + `:` for interactions
